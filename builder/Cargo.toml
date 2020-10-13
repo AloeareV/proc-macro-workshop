@@ -10,10 +10,12 @@ proc-macro = true
 
 [[test]]
 name = "tests"
-path = "tests/progress.rs"
+path = "tests/01-parse.rs"
 
 [dev-dependencies]
 trybuild = { version = "1.0", features = ["diff"] }
 
 [dependencies]
-# TODO
+proc-macro2 = "*"
+quote = "*"
+syn = { version = "1.0.44", features = ["extra-traits"] }
