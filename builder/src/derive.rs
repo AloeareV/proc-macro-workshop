@@ -39,13 +39,69 @@ pub fn make_builder_fn(name: &syn::Ident, input: &syn::Fields) -> proc_macro2::T
         input,
         |field_name, _ty| quote::quote!(#field_name: None,),
         |name, fields| {
-            quote::quote!(impl #name {
-                pub fn builder() -> #builder_name {
-                    #builder_name {
-                        #(#fields)*
+            quote::quote!(
+                impl #name {
+                    pub fn builder() -> #builder_name {
+                        #builder_name {
+                            #(#fields)*
+                        }
                     }
                 }
-            })
+            )
+        },
+    )
+}
+
+pub fn make_builder_methods(name: &syn::Ident, input: &syn::Fields) -> proc_macro2::TokenStream {
+    let builder_name = quote::format_ident!("{}Builder", name);
+    create_from_input(
+        name,
+        input,
+        |field_name, ty| {
+            quote::quote!(
+                pub fn #field_name(&mut self, input: #ty) -> &mut Self {
+                    self.#field_name = Some(input);
+                    self
+                }
+            )
+        },
+        |_name, impls| {
+            quote::quote!(
+                impl #builder_name {
+                    #(#impls)*
+                }
+            )
+        },
+    )
+}
+
+pub fn make_build_method(name: &syn::Ident, input: &syn::Fields) -> proc_macro2::TokenStream {
+    let builder_name = quote::format_ident!("{}Builder", name);
+    create_from_input(
+        name,
+        input,
+        |field_name, _ty| {
+            let field_string = field_name.to_string();
+            quote::quote!(
+                #field_name: std::mem::take(&mut self.#field_name).ok_or(
+                    Box::<dyn std::error::Error>::from(
+                        format!("No value given for {} field", #field_string)
+                    )
+                )?,
+            )
+        },
+        |name, fields| {
+            quote::quote!(
+                impl #builder_name {
+                    pub fn build(&mut self) -> Result<#name, Box<dyn std::error::Error>> {
+                        Ok(
+                            #name {
+                                #(#fields)*
+                            }
+                        )
+                    }
+                }
+            )
         },
     )
 }

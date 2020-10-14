@@ -10,7 +10,7 @@ proc-macro = true
 
 [[test]]
 name = "tests"
-path = "tests/02-create-builder.rs"
+path = "tests/05-method-chaining.rs"
 
 [dev-dependencies]
 trybuild = { version = "1.0", features = ["diff"] }
