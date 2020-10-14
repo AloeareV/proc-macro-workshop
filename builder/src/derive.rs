@@ -8,7 +8,7 @@ pub fn make_builder_struct(
     utils::create_from_input(
         &name,
         input,
-        |field_name, ty| match utils::is_optional(ty).is_some() {
+        |field_name, attr, ty| match utils::is_optional(ty).is_some() {
             true => quote::quote!(pub #field_name: #ty,),
             false => quote::quote!(pub #field_name: Option<#ty>,),
         },
@@ -24,7 +24,7 @@ pub fn make_builder_fn(
     utils::create_from_input(
         name,
         input,
-        |field_name, _ty| quote::quote!(#field_name: None,),
+        |field_name, attr, _ty| quote::quote!(#field_name: None,),
         |name, fields| {
             quote::quote!(
                 impl #name {
@@ -47,20 +47,54 @@ pub fn make_builder_methods(
     utils::create_from_input(
         name,
         input,
-        |field_name, ty| {
-            let ty = match utils::is_optional(ty) {
+        |field_name, attrs, ty| {
+            let mut ty_tokens = match utils::is_optional(ty) {
                 Some(generic_for) => {
-                    let option_of = utils::get_option_type(&generic_for);
+                    let option_of = utils::get_contained_type(&generic_for);
                     quote::quote!(#option_of)
                 }
                 None => quote::quote!(#ty),
             };
-            quote::quote!(
-                pub fn #field_name(&mut self, input: #ty) -> &mut Self {
-                    self.#field_name = Some(input);
-                    self
+
+            if let Some((_each, method_name)) = utils::parse_attribute(attrs) {
+                match utils::is_vec(ty) {
+                    Some(generic_for) => {
+                        let vec_of = utils::get_contained_type(&generic_for);
+                        ty_tokens = quote::quote!(#vec_of);
+
+                        let method_name = syn::Ident::new(
+                            &method_name,
+                            proc_macro2::Span::call_site(),
+                        );
+                        quote::quote!(
+                        pub fn #method_name(
+                                &mut self,
+                                input: #ty_tokens
+                            ) -> &mut Self {
+                                let vec = std::mem::take(&mut self.#field_name);
+                                let mut vec = match vec {
+                                    Some(v) => v,
+                                    None => Vec::new()
+                                };
+                                vec.push(input);
+                                self.#field_name = Some(vec);
+                                self
+                            }
+                        )
+                    }
+                    None => panic!("Can only handle each on Vec<T>s"),
                 }
-            )
+            } else {
+                quote::quote!(
+                    pub fn #field_name(
+                        &mut self,
+                        input: #ty_tokens
+                    ) -> &mut Self {
+                        self.#field_name = Some(input);
+                        self
+                    }
+                )
+            }
         },
         |_name, impls| {
             quote::quote!(
@@ -80,7 +114,7 @@ pub fn make_build_method(
     utils::create_from_input(
         name,
         input,
-        |field_name, ty| {
+        |field_name, attr, ty| {
             let field_string = field_name.to_string();
             match utils::is_optional(&ty).is_some() {
                 true => quote::quote!(

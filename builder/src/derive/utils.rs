@@ -1,7 +1,11 @@
 pub(super) fn create_from_input(
     name: &syn::Ident,
     input: &syn::Fields,
-    inner: impl Fn(&syn::Ident, &syn::Type) -> proc_macro2::TokenStream,
+    inner: impl Fn(
+        &syn::Ident,
+        &Vec<syn::Attribute>,
+        &syn::Type,
+    ) -> proc_macro2::TokenStream,
     outer: impl Fn(
         &syn::Ident,
         Vec<proc_macro2::TokenStream>,
@@ -17,7 +21,7 @@ pub(super) fn create_from_input(
                 None => unreachable!("What the hell"),
                 Some(field_name) => {
                     let ty = &field.ty;
-                    inner(field_name, ty)
+                    inner(field_name, &field.attrs, ty)
                 }
             })
             .collect::<Vec<proc_macro2::TokenStream>>(),
@@ -26,9 +30,20 @@ pub(super) fn create_from_input(
 }
 
 pub(super) fn is_optional(ty: &syn::Type) -> Option<&syn::PathArguments> {
+    is_container(ty, "Option")
+}
+
+pub(super) fn is_vec(ty: &syn::Type) -> Option<&syn::PathArguments> {
+    is_container(ty, "Vec")
+}
+
+fn is_container<'a>(
+    ty: &'a syn::Type,
+    container_name: &str,
+) -> Option<&'a syn::PathArguments> {
     if let syn::Type::Path(path) = ty {
         let final_segment = path.path.segments.iter().last().unwrap();
-        if final_segment.ident == "Option" {
+        if final_segment.ident == container_name {
             Some(&final_segment.arguments)
         } else {
             None
@@ -38,14 +53,39 @@ pub(super) fn is_optional(ty: &syn::Type) -> Option<&syn::PathArguments> {
     }
 }
 
-pub(super) fn get_option_type(input: &syn::PathArguments) -> &syn::Type {
+pub(super) fn get_contained_type(input: &syn::PathArguments) -> &syn::Type {
     if let syn::PathArguments::AngleBracketed(arg) = input {
         if let syn::GenericArgument::Type(ty) = arg.args.first().unwrap() {
             ty
         } else {
-            panic!("Struct has 'Option' type with more than one parameter")
+            panic!("Can only handle single parameter container types")
         }
     } else {
-        panic!("Struct has 'Option' type with more than one parameter")
+        panic!("Can only handle sinlge parameter container types")
     }
+}
+pub(super) fn parse_attribute(
+    attrs: &Vec<syn::Attribute>,
+) -> Option<(String, String)> {
+    attrs.iter().find_map(|attr| {
+        let mut ret = None;
+        if let Ok(syn::Meta::List(meta)) = attr.parse_meta() {
+            if let Some(segment) = meta.path.segments.last() {
+                if let Some(syn::NestedMeta::Meta(syn::Meta::NameValue(
+                    name_val,
+                ))) = meta.nested.first()
+                {
+                    if let Some(key_segment) = name_val.path.segments.first() {
+                        if let syn::Lit::Str(val) = &name_val.lit {
+                            ret = Some((
+                                key_segment.ident.to_string(),
+                                val.value(),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        ret
+    })
 }
