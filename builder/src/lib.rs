@@ -14,16 +14,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let builder_fn = derive::make_builder_fn(&name, &nfs.fields);
     let builder_methods = derive::make_builder_methods(&name, &nfs.fields);
     let build_method = derive::make_build_method(&name, &nfs.fields);
-    println!(
-        "{}",
-        TokenStream::from(quote::quote!(
-            #builder_struct
-            #builder_fn
-            #builder_methods
-            #build_method
-        ))
-        .to_string()
-    );
     TokenStream::from(quote::quote!(
             #builder_struct
             #builder_fn
