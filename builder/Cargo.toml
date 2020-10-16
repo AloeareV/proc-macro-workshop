@@ -10,7 +10,7 @@ proc-macro = true
 
 [[test]]
 name = "tests"
-path = "tests/07-repeated-field.rs"
+path = "tests/08-unrecognized-attribute.rs"
 
 [dev-dependencies]
 trybuild = { version = "1.0", features = ["diff"] }

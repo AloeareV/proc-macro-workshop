@@ -56,33 +56,40 @@ pub fn make_builder_methods(
                 None => quote::quote!(#ty),
             };
 
-            if let Some((_each, method_name)) = utils::parse_attribute(attrs) {
-                match utils::is_vec(ty) {
-                    Some(generic_for) => {
-                        let vec_of = utils::get_contained_type(&generic_for);
-                        ty_tokens = quote::quote!(#vec_of);
+            if let Some((each, method_name)) = utils::parse_attribute(attrs) {
+                match each.to_string().as_ref() {
+                    "each" => match utils::is_vec(ty) {
+                        Some(generic_for) => {
+                            let vec_of =
+                                utils::get_contained_type(&generic_for);
+                            ty_tokens = quote::quote!(#vec_of);
 
-                        let method_name = syn::Ident::new(
-                            &method_name,
-                            proc_macro2::Span::call_site(),
-                        );
-                        quote::quote!(
-                        pub fn #method_name(
-                                &mut self,
-                                input: #ty_tokens
-                            ) -> &mut Self {
-                                let vec = std::mem::take(&mut self.#field_name);
-                                let mut vec = match vec {
-                                    Some(v) => v,
-                                    None => Vec::new()
-                                };
-                                vec.push(input);
-                                self.#field_name = Some(vec);
-                                self
-                            }
-                        )
+                            let method_name = syn::Ident::new(
+                                &method_name,
+                                proc_macro2::Span::call_site(),
+                            );
+                            quote::quote!(
+                            pub fn #method_name(
+                                    &mut self,
+                                    input: #ty_tokens
+                                ) -> &mut Self {
+                                    let vec = std::mem::take(&mut self.#field_name);
+                                    let mut vec = match vec {
+                                        Some(v) => v,
+                                        None => Vec::new()
+                                    };
+                                    vec.push(input);
+                                    self.#field_name = Some(vec);
+                                    self
+                                }
+                            )
+                        }
+                        None => panic!("Can only handle each on Vec<T>s"),
+                    },
+                    e @ _ => {
+                        let error = format!("Invalid attribute '{}'.", each);
+                        quote::quote_spanned!(each.span() => compile_error!(#error);)
                     }
-                    None => panic!("Can only handle each on Vec<T>s"),
                 }
             } else {
                 quote::quote!(
