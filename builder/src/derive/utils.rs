@@ -70,16 +70,12 @@ pub(super) fn parse_attribute(
     attrs.iter().find_map(|attr| {
         let mut ret = None;
         if let Ok(syn::Meta::List(meta)) = attr.parse_meta() {
-            if let Some(segment) = meta.path.segments.last() {
-                if let Some(syn::NestedMeta::Meta(syn::Meta::NameValue(
-                    name_val,
-                ))) = meta.nested.first()
-                {
-                    if let Some(key_segment) = name_val.path.segments.first() {
-                        if let syn::Lit::Str(val) = &name_val.lit {
-                            ret =
-                                Some((key_segment.ident.clone(), val.value()));
-                        }
+            if let Some(syn::NestedMeta::Meta(syn::Meta::NameValue(name_val))) =
+                meta.nested.first()
+            {
+                if let Some(key_segment) = name_val.path.segments.first() {
+                    if let syn::Lit::Str(val) = &name_val.lit {
+                        ret = Some((key_segment.ident.clone(), val.value()));
                     }
                 }
             }

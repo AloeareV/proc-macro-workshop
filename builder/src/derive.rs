@@ -8,9 +8,9 @@ pub fn make_builder_struct(
     utils::create_from_input(
         &name,
         input,
-        |field_name, attr, ty| match utils::is_optional(ty).is_some() {
+        |field_name, _attr, ty| match utils::is_optional(ty).is_some() {
             true => quote::quote!(pub #field_name: #ty,),
-            false => quote::quote!(pub #field_name: Option<#ty>,),
+            false => quote::quote!(pub #field_name: std::option::Option<#ty>,),
         },
         |name, fields| quote::quote!(pub struct #name {#(#fields)*}),
     )
@@ -24,7 +24,7 @@ pub fn make_builder_fn(
     utils::create_from_input(
         name,
         input,
-        |field_name, attr, _ty| quote::quote!(#field_name: None,),
+        |field_name, _attr, _ty| quote::quote!(#field_name: None,),
         |name, fields| {
             quote::quote!(
                 impl #name {
@@ -76,17 +76,17 @@ pub fn make_builder_methods(
                                     let vec = std::mem::take(&mut self.#field_name);
                                     let mut vec = match vec {
                                         Some(v) => v,
-                                        None => Vec::new()
+                                        None => std::vec::Vec::new()
                                     };
                                     vec.push(input);
-                                    self.#field_name = Some(vec);
+                                    self.#field_name = std::option::Option::Some(vec);
                                     self
                                 }
                             )
                         }
                         None => panic!("Can only handle each on Vec<T>s"),
                     },
-                    e @ _ => {
+                    _ => {
                         let error = format!("Invalid attribute '{}'.", each);
                         quote::quote_spanned!(each.span() => compile_error!(#error);)
                     }
@@ -97,7 +97,7 @@ pub fn make_builder_methods(
                         &mut self,
                         input: #ty_tokens
                     ) -> &mut Self {
-                        self.#field_name = Some(input);
+                        self.#field_name = std::option::Option::Some(input);
                         self
                     }
                 )
@@ -121,7 +121,7 @@ pub fn make_build_method(
     utils::create_from_input(
         name,
         input,
-        |field_name, attr, ty| {
+        |field_name, _attr, ty| {
             let field_string = field_name.to_string();
             match utils::is_optional(&ty).is_some() {
                 true => quote::quote!(
@@ -133,7 +133,7 @@ pub fn make_build_method(
                     #field_name: std::mem::take(
                         &mut self.#field_name
                     ).ok_or(
-                        Box::<dyn std::error::Error>::from(
+                        std::boxed::Box::<dyn std::error::Error>::from(
                             format!(
                                 "No value given for {} field",
                                 #field_string
@@ -146,7 +146,7 @@ pub fn make_build_method(
         |name, fields| {
             quote::quote!(
                 impl #builder_name {
-                    pub fn build(&mut self) -> Result<#name, Box<dyn std::error::Error>> {
+                    pub fn build(&mut self) -> std::result::Result<#name, std::boxed::Box<dyn std::error::Error>> {
                         Ok(
                             #name {
                                 #(#fields)*
