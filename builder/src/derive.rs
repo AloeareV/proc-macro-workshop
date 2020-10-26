@@ -8,9 +8,14 @@ pub fn make_builder_struct(
     utils::create_from_input(
         &name,
         input,
-        |field_name, _attr, ty| match utils::is_optional(ty).is_some() {
-            true => quote::quote!(pub #field_name: #ty,),
-            false => quote::quote!(pub #field_name: std::option::Option<#ty>,),
+        |field_name, _attr, ty| match (
+            utils::is_optional(ty).is_some(),
+            utils::is_vec(ty).is_some(),
+        ) {
+            (false, false) => {
+                quote::quote!(pub #field_name: std::option::Option<#ty>,)
+            }
+            _ => quote::quote!(pub #field_name: #ty,),
         },
         |name, fields| quote::quote!(pub struct #name {#(#fields)*}),
     )
@@ -24,7 +29,10 @@ pub fn make_builder_fn(
     utils::create_from_input(
         name,
         input,
-        |field_name, _attr, _ty| quote::quote!(#field_name: None,),
+        |field_name, _attr, ty| match utils::is_vec(ty) {
+            Some(_) => quote::quote!(#field_name: std::vec::Vec::new(),),
+            None => quote::quote!(#field_name: None,),
+        },
         |name, fields| {
             quote::quote!(
                 impl #name {
@@ -73,13 +81,9 @@ pub fn make_builder_methods(
                                     &mut self,
                                     input: #ty_tokens
                                 ) -> &mut Self {
-                                    let vec = std::mem::take(&mut self.#field_name);
-                                    let mut vec = match vec {
-                                        Some(v) => v,
-                                        None => std::vec::Vec::new()
-                                    };
+                                    let mut vec = std::mem::take(&mut self.#field_name);
                                     vec.push(input);
-                                    self.#field_name = std::option::Option::Some(vec);
+                                    self.#field_name = (vec);
                                     self
                                 }
                             )
@@ -87,17 +91,23 @@ pub fn make_builder_methods(
                         None => panic!("Can only handle each on Vec<T>s"),
                     },
                     _ => {
-                        let error = format!("Invalid attribute '{}'.", each);
-                        quote::quote_spanned!(each.span() => compile_error!(#error);)
+                        let error =
+                            format!("expected `builder(each = \"...\")`");
+                        let span = attrs.first().unwrap().bracket_token.span;
+                        quote::quote_spanned!(span=> compile_error!(#error);)
                     }
                 }
             } else {
+                let field_value = match utils::is_vec(ty).is_some() {
+                    true => quote::quote!(input),
+                    false => quote::quote!(std::option::Option::Some(input)),
+                };
                 quote::quote!(
                     pub fn #field_name(
                         &mut self,
                         input: #ty_tokens
                     ) -> &mut Self {
-                        self.#field_name = std::option::Option::Some(input);
+                        self.#field_name = #field_value;
                         self
                     }
                 )
@@ -123,25 +133,26 @@ pub fn make_build_method(
         input,
         |field_name, _attr, ty| {
             let field_string = field_name.to_string();
-            match utils::is_optional(&ty).is_some() {
-                true => quote::quote!(
-                    #field_name: std::mem::take(
-                        &mut self.#field_name
-                    )
-                ),
-                false => quote::quote!(
-                    #field_name: std::mem::take(
-                        &mut self.#field_name
-                    ).ok_or(
-                        std::boxed::Box::<dyn std::error::Error>::from(
-                            format!(
-                                "No value given for {} field",
-                                #field_string
+            let unwrapper = match (
+                utils::is_optional(&ty).is_some(),
+                utils::is_vec(&ty).is_some(),
+            ) {
+                (false, false) => quote::quote!(.ok_or(
+                            std::boxed::Box::<dyn std::error::Error>::from(
+                                format!(
+                                    "No value given for {} field",
+                                    #field_string
+                                )
                             )
-                        )
-                    )?,
-                ),
-            }
+                        )?),
+                _ => proc_macro2::TokenStream::new(),
+            };
+
+            quote::quote!(
+                #field_name: std::mem::take(
+                    &mut self.#field_name
+                )#unwrapper
+            )
         },
         |name, fields| {
             quote::quote!(
@@ -149,7 +160,7 @@ pub fn make_build_method(
                     pub fn build(&mut self) -> std::result::Result<#name, std::boxed::Box<dyn std::error::Error>> {
                         Ok(
                             #name {
-                                #(#fields)*
+                                #(#fields),*
                             }
                         )
                     }
