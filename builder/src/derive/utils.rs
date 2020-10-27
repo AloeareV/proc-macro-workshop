@@ -66,7 +66,7 @@ pub(super) fn get_contained_type(input: &syn::PathArguments) -> &syn::Type {
 }
 pub(super) fn parse_attribute(
     attrs: &Vec<syn::Attribute>,
-) -> Option<(syn::Ident, String)> {
+) -> Option<(syn::Ident, syn::MetaList, String)> {
     attrs.iter().find_map(|attr| {
         let mut ret = None;
         if let Ok(syn::Meta::List(meta)) = attr.parse_meta() {
@@ -75,7 +75,11 @@ pub(super) fn parse_attribute(
             {
                 if let Some(key_segment) = name_val.path.segments.first() {
                     if let syn::Lit::Str(val) = &name_val.lit {
-                        ret = Some((key_segment.ident.clone(), val.value()));
+                        ret = Some((
+                            key_segment.ident.clone(),
+                            meta.clone(),
+                            val.value(),
+                        ));
                     }
                 }
             }

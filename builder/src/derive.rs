@@ -64,7 +64,9 @@ pub fn make_builder_methods(
                 None => quote::quote!(#ty),
             };
 
-            if let Some((each, method_name)) = utils::parse_attribute(attrs) {
+            if let Some((each, meta, method_name)) =
+                utils::parse_attribute(attrs)
+            {
                 match each.to_string().as_ref() {
                     "each" => match utils::is_vec(ty) {
                         Some(generic_for) => {
@@ -93,8 +95,8 @@ pub fn make_builder_methods(
                     _ => {
                         let error =
                             format!("expected `builder(each = \"...\")`");
-                        let span = attrs.first().unwrap().bracket_token.span;
-                        quote::quote_spanned!(span=> compile_error!(#error);)
+                        //let span = attrs.first().unwrap().bracket_token.span;
+                        syn::Error::new_spanned(meta, error).to_compile_error()
                     }
                 }
             } else {
