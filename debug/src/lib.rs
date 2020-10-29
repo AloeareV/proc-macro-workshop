@@ -23,12 +23,22 @@ fn declare_impl_block(input: syn::DeriveInput) -> proc_macro2::TokenStream {
     let mut debug_bounds = Vec::new();
     for type_param in input.generics.type_params() {
         let id = &type_param.ident;
-        if visitor.non_phantom_paths.contains(&id.to_string()) {
-            debug_bounds.push(quote::quote!(#id: std::fmt::Debug,));
+        if let Some(path) = visitor.non_phantom_paths.iter().find(|path| {
+            path.segments.first().unwrap().ident.to_string() == id.to_string()
+        }) {
+            debug_bounds.push(quote::quote!(#path: std::fmt::Debug,));
         }
     }
 
-    eprintln!("Paths: {:?}", visitor.non_phantom_paths);
+    use quote::ToTokens as _;
+    eprintln!(
+        "Paths: {:?}",
+        visitor
+            .non_phantom_paths
+            .iter()
+            .map(|path| path.to_token_stream().to_string())
+            .collect::<Vec<String>>()
+    );
 
     let where_clause = match where_clause {
         Some(where_clause) => {
@@ -63,7 +73,7 @@ fn declare_impl_block(input: syn::DeriveInput) -> proc_macro2::TokenStream {
 struct DebugConfigVisitor {
     non_default_format: Option<String>,
     code: Vec<proc_macro2::TokenStream>,
-    non_phantom_paths: Vec<String>,
+    non_phantom_paths: Vec<syn::Path>,
     errors: Vec<syn::Error>,
 }
 
@@ -118,12 +128,11 @@ impl<'ast> syn::visit::Visit<'ast> for DebugConfigVisitor {
         syn::visit::visit_field(self, field);
     }
 
-    fn visit_path_segment(&mut self, seg: &'ast syn::PathSegment) {
-        self.non_phantom_paths.push(seg.ident.to_string());
+    fn visit_path(&mut self, path: &'ast syn::Path) {
         use quote::ToTokens as _;
-        eprintln!("Visiting path_seg: {}", seg.to_token_stream().to_string());
-        if seg.ident.to_string() != "PhantomData" {
-            syn::visit::visit_path_segment(self, seg);
+        if path.segments.last().unwrap().ident.to_string() != "PhantomData" {
+            self.non_phantom_paths.push(path.clone());
+            syn::visit::visit_path(self, path);
         }
     }
 }
