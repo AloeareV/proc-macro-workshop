@@ -23,8 +23,12 @@ fn declare_impl_block(input: syn::DeriveInput) -> proc_macro2::TokenStream {
     let mut debug_bounds = Vec::new();
     for type_param in input.generics.type_params() {
         let id = &type_param.ident;
-        debug_bounds.push(quote::quote!(#id: std::fmt::Debug,));
+        if visitor.non_phantom_paths.contains(&id.to_string()) {
+            debug_bounds.push(quote::quote!(#id: std::fmt::Debug,));
+        }
     }
+
+    eprintln!("Paths: {:?}", visitor.non_phantom_paths);
 
     let where_clause = match where_clause {
         Some(where_clause) => {
@@ -59,6 +63,7 @@ fn declare_impl_block(input: syn::DeriveInput) -> proc_macro2::TokenStream {
 struct DebugConfigVisitor {
     non_default_format: Option<String>,
     code: Vec<proc_macro2::TokenStream>,
+    non_phantom_paths: Vec<String>,
     errors: Vec<syn::Error>,
 }
 
@@ -67,6 +72,7 @@ impl DebugConfigVisitor {
         Self {
             non_default_format: None,
             code: Vec::new(),
+            non_phantom_paths: Vec::new(),
             errors: Vec::new(),
         }
     }
@@ -105,5 +111,19 @@ impl<'ast> syn::visit::Visit<'ast> for DebugConfigVisitor {
             }
             None => quote::quote!(#name, &self.#ident),
         });
+        use quote::ToTokens as _;
+        if let syn::Type::Path(ty) = &field.ty {
+            eprintln!("Type: {}", ty.path.segments.last().unwrap().ident);
+        }
+        syn::visit::visit_field(self, field);
+    }
+
+    fn visit_path_segment(&mut self, seg: &'ast syn::PathSegment) {
+        self.non_phantom_paths.push(seg.ident.to_string());
+        use quote::ToTokens as _;
+        eprintln!("Visiting path_seg: {}", seg.to_token_stream().to_string());
+        if seg.ident.to_string() != "PhantomData" {
+            syn::visit::visit_path_segment(self, seg);
+        }
     }
 }
