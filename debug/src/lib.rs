@@ -20,15 +20,6 @@ fn declare_impl_block(input: syn::DeriveInput) -> proc_macro2::TokenStream {
 
     let (impl_generics, ty_generics, where_clause) =
         input.generics.split_for_impl();
-    use quote::ToTokens as _;
-    eprintln!(
-        "Paths: {:?}",
-        visitor
-            .non_phantom_paths
-            .iter()
-            .map(|path| path.to_token_stream().to_string())
-            .collect::<Vec<String>>()
-    );
 
     let mut use_custom_bounds = None;
     let custom_bounds = input.attrs.iter().map(|attr| attr.parse_meta()).next();
@@ -91,7 +82,7 @@ fn declare_impl_block(input: syn::DeriveInput) -> proc_macro2::TokenStream {
         None => quote::quote!(where #(#debug_bounds)*),
     };
 
-    let ret = quote::quote!(
+    quote::quote!(
         impl #impl_generics std::fmt::Debug for #name #ty_generics #where_clause {
             fn fmt(
                 &self,
@@ -103,9 +94,7 @@ fn declare_impl_block(input: syn::DeriveInput) -> proc_macro2::TokenStream {
                     .finish()
             }
         }
-    );
-    eprintln!("{}", ret.to_string());
-    ret
+    )
 }
 
 #[derive(Debug)]
@@ -160,15 +149,10 @@ impl<'ast> syn::visit::Visit<'ast> for DebugConfigVisitor {
             }
             None => quote::quote!(#name, &self.#ident),
         });
-        use quote::ToTokens as _;
-        if let syn::Type::Path(ty) = &field.ty {
-            eprintln!("Type: {}", ty.path.segments.last().unwrap().ident);
-        }
         syn::visit::visit_field(self, field);
     }
 
     fn visit_path(&mut self, path: &'ast syn::Path) {
-        use quote::ToTokens as _;
         if path.segments.last().unwrap().ident.to_string() != "PhantomData" {
             self.non_phantom_paths.push(path.clone());
             syn::visit::visit_path(self, path);
