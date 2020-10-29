@@ -20,16 +20,6 @@ fn declare_impl_block(input: syn::DeriveInput) -> proc_macro2::TokenStream {
 
     let (impl_generics, ty_generics, where_clause) =
         input.generics.split_for_impl();
-    let mut debug_bounds = Vec::new();
-    for type_param in input.generics.type_params() {
-        let id = &type_param.ident;
-        if let Some(path) = visitor.non_phantom_paths.iter().find(|path| {
-            path.segments.first().unwrap().ident.to_string() == id.to_string()
-        }) {
-            debug_bounds.push(quote::quote!(#path: std::fmt::Debug,));
-        }
-    }
-
     use quote::ToTokens as _;
     eprintln!(
         "Paths: {:?}",
@@ -39,6 +29,55 @@ fn declare_impl_block(input: syn::DeriveInput) -> proc_macro2::TokenStream {
             .map(|path| path.to_token_stream().to_string())
             .collect::<Vec<String>>()
     );
+
+    let mut use_custom_bounds = None;
+    let custom_bounds = input.attrs.iter().map(|attr| attr.parse_meta()).next();
+    if let Some(Ok(syn::Meta::List(custom_bounds))) = custom_bounds {
+        assert_eq!(
+            custom_bounds
+                .path
+                .segments
+                .first()
+                .unwrap()
+                .ident
+                .to_string(),
+            "debug"
+        ); //In production code, this needs to be an explicit compiler error
+           //like in builder 08.
+        if let Some(syn::NestedMeta::Meta(syn::Meta::NameValue(
+            custom_bounds,
+        ))) = custom_bounds.nested.first()
+        {
+            match &custom_bounds.lit {
+                syn::Lit::Str(lit_str) => {
+                    use_custom_bounds = Some(lit_str.value())
+                }
+                _ => (),
+            };
+        }
+    };
+
+    let mut debug_bounds = Vec::new();
+    match use_custom_bounds {
+        None => {
+            for type_param in input.generics.type_params() {
+                let id = &type_param.ident;
+                if let Some(path) =
+                    visitor.non_phantom_paths.iter().find(|path| {
+                        path.segments.first().unwrap().ident.to_string()
+                            == id.to_string()
+                    })
+                {
+                    debug_bounds.push(quote::quote!(#path: std::fmt::Debug,));
+                }
+            }
+        }
+        Some(bound) => {
+            use std::str::FromStr as _;
+            debug_bounds
+                .push(proc_macro2::TokenStream::from_str(&bound).unwrap());
+        }
+    }
 
     let where_clause = match where_clause {
         Some(where_clause) => {
